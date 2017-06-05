@@ -5,17 +5,34 @@
   <template>
     <style>
       :host {
-        display: flex;
-        flex-direction: row;
-        flex-wrap: wrap;
-        align-items: stretch;
+        display: grid;
+        --cols-in-row: 1;
       }
 
       :host ::slotted(*) {
-        box-sizing: border-box;
-        flex-grow: 1;
         overflow: hidden;
       }
+
+      /* In large mode all items should always be next to each other. */
+      :host(.large) {
+        grid-template-columns: repeat(var(--cols-in-row), 1fr);
+      }
+
+      /* In medium mode all items should be next to each other expect for when
+         there are four items. Then it should be a 2x2 grid. */
+      :host(.medium) {
+        grid-template-columns: repeat(var(--cols-in-row), 1fr);
+      }
+
+      :host(.medium.items-4) {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      /* In small mode all items should always be in a vertical list */
+      :host(.small) {
+        grid-template-columns: 1fr;
+      }
+
     </style>
     <slot id="insertionPoint"></slot>
   </template>
@@ -76,22 +93,6 @@
           this.classList.remove(this._MEDIUM_VIEWPORT_CLASSNAME);
           this.classList.add(this._LARGE_VIEWPORT_CLASSNAME);
         }
-      }
-      /**
-       * Calculates flex basis based on colSpan and width
-       * @param{Number} colspan value of the row
-       * @param{Number} width of the row in px
-       * @param{Number} amount of columns in the row
-       */
-      _calculateFlexBasis(colSpan, width, colsInRow) {
-        if (width < this._ONE_COLUMN_MAX_WIDTH) {
-          colsInRow = 1;
-        } else if (width < this._TWO_COLUMNS_MAX_WIDTH && colsInRow == 4) {
-          colsInRow = 2;
-        }
-        let flexBasis = colSpan / colsInRow * 100;
-        flexBasis = flexBasis > 100 ? 100 : flexBasis;
-        return flexBasis + '%';
       }
 
       _reportError() {
@@ -161,14 +162,14 @@
       }
 
       redraw() {
-        this._recalculateFlexBasis(true);
+        this._recalculateColumns(true);
       }
 
       _onIronResize() {
-        this._recalculateFlexBasis(false);
+        this._recalculateColumns(false);
       }
 
-      _recalculateFlexBasis(forceResize) {
+      _recalculateColumns(forceResize) {
         const width = this.getBoundingClientRect().width;
         if (forceResize || width != this._oldWidth) {
           const nodes = this.$.insertionPoint.assignedNodes();
@@ -177,12 +178,21 @@
           this._addStyleNames(width);
           const boardCols = this._parseBoardCols(filteredNodes);
           const colsInRow = boardCols.reduce((a, b) => a + b, 0);
+          this.classList.remove('items-1');
+          this.classList.remove('items-2');
+          this.classList.remove('items-3');
+          this.classList.remove('items-4');
+          this.classList.add('items-' + colsInRow);
+
+          this.updateStyles({'--cols-in-row': colsInRow});
           this._removeExtraNodesFromDOM(boardCols, filteredNodes).forEach((e,i) => {
-              let newFlexBasis = this._calculateFlexBasis(boardCols[i], width, colsInRow);
-              if(forceResize || !this._oldFlexBasis[i] || this._oldFlexBasis[i] != newFlexBasis) {
-                  this._oldFlexBasis[i] = newFlexBasis
-                  e.style.flexBasis = newFlexBasis;
-              }
+            /* if items are set to span columns, and we are in other than one-column mode,
+               then set gridColumnEnd to get a span */
+            if(boardCols[i]>1 && !this.classList.contains(this._SMALL_VIEWPORT_CLASSNAME)){
+              e.style.gridColumnEnd = boardCols[i] + " span";
+            } else {
+              e.style.gridColumnEnd = null;
+            }
           });
           this._oldWidth = width;
         }
